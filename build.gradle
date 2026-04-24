@@ -28,7 +28,9 @@ repositories {
 }
 
 dependencies {
-	implementation "com.github.MinicraftPlus:minicraft-plus-revived:${project.minicraftplus_version}"
+	//implementation "com.github.MinicraftPlus:minicraft-plus-revived:${project.minicraftplus_version}"
+	implementation files("libs/minicraft-plus-2.2.3.jar")
+	//implementation files("run/minicraft-plus-2.2.0-dev4.jar")
 	implementation "io.github.pseudodistant:MinicraftGameProvider:${project.provider_version}"
 	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	implementation "org.tinylog:tinylog-api:2.4.1"
@@ -114,4 +116,8 @@ publishing {
 		// The repositories here will be used for publishing your artifact, not for
 		// retrieving dependencies.
 	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = "UTF-8"
 }

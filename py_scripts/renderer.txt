@@ -1,0 +1,518 @@
+//
+// Source code recreated from a .class file by IntelliJ IDEA
+// (powered by FernFlower decompiler)
+//
+
+package minicraft.core;
+
+import java.awt.Canvas;
+import java.awt.Dimension;
+import java.awt.Graphics2D;
+import java.awt.image.BufferStrategy;
+import java.awt.image.BufferedImage;
+import java.awt.image.ImageObserver;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import javax.imageio.ImageIO;
+import minicraft.core.CrashHandler.ErrorInfo.ErrorType;
+import minicraft.core.io.Localization;
+import minicraft.core.io.Settings;
+import minicraft.entity.furniture.Bed;
+import minicraft.entity.mob.AirWizard;
+import minicraft.entity.mob.ObsidianKnight;
+import minicraft.gfx.Color;
+import minicraft.gfx.Ellipsis;
+import minicraft.gfx.Font;
+import minicraft.gfx.FontStyle;
+import minicraft.gfx.MinicraftImage;
+import minicraft.gfx.Point;
+import minicraft.gfx.Screen;
+import minicraft.gfx.SpriteLinker;
+import minicraft.gfx.SpriteLinker.SpriteType;
+import minicraft.item.Items;
+import minicraft.item.PotionType;
+import minicraft.item.ToolItem;
+import minicraft.item.ToolType;
+import minicraft.item.WateringCanItem;
+import minicraft.level.Level;
+import minicraft.screen.LoadingDisplay;
+import minicraft.screen.Menu;
+import minicraft.screen.QuestsDisplay;
+import minicraft.screen.RelPos;
+import minicraft.screen.SignDisplayMenu;
+import minicraft.screen.TutorialDisplayHandler;
+import minicraft.screen.entry.ListEntry;
+import minicraft.screen.entry.StringEntry;
+import minicraft.util.Logging;
+import minicraft.util.Quest;
+
+public class Renderer extends Game {
+    public static int HEIGHT = 192;
+    public static int WIDTH = 288;
+    static float SCALE = 3.0F;
+    public static Screen screen;
+    public static SpriteLinker spriteLinker = new SpriteLinker();
+    static Canvas canvas = new Canvas();
+    private static BufferedImage image;
+    public static boolean readyToRenderGameplay = false;
+    public static boolean showDebugInfo = false;
+    public static SignDisplayMenu signDisplayMenu = null;
+    private static Ellipsis ellipsis = new Ellipsis.SmoothEllipsis(new Ellipsis.DotUpdater.TickUpdater());
+    private static int potionRenderOffset = 0;
+    private static SpriteLinker.LinkedSprite hudSheet;
+
+    private Renderer() {
+    }
+
+    public static MinicraftImage loadDefaultSkinSheet() {
+        try {
+            MinicraftImage skinsSheet = MinicraftImage.createDefaultCompatible(ImageIO.read((InputStream)Objects.requireNonNull(Game.class.getResourceAsStream("/resources/textures/skins.png"))));
+            return skinsSheet;
+        } catch (NullPointerException e) {
+            CrashHandler.crashHandle(e, new CrashHandler.ErrorInfo("Sprite Sheet Not Found", ErrorType.UNEXPECTED, true, "A sprite sheet was not found."));
+            return null;
+        } catch (IllegalArgumentException | MinicraftImage.MinicraftImageDimensionIncompatibleException | IOException e) {
+            CrashHandler.crashHandle(e, new CrashHandler.ErrorInfo("Sprite Sheet Could Not be Loaded", ErrorType.UNEXPECTED, true, "Could not load a sprite sheet."));
+            return null;
+        }
+    }
+
+    public static void initScreen() {
+        image = new BufferedImage(WIDTH, HEIGHT, 1);
+        screen = new Screen(image);
+        hudSheet = new SpriteLinker.LinkedSprite(SpriteType.Gui, "hud");
+        canvas.createBufferStrategy(3);
+    }
+
+    public static void render() {
+        if (screen != null) {
+            screen.clear(0);
+            if (readyToRenderGameplay) {
+                renderLevel();
+                if (player.renderGUI) {
+                    renderGui();
+                }
+            }
+
+            if (currentDisplay != null) {
+                currentDisplay.render(screen);
+            }
+
+            if (!canvas.hasFocus()) {
+                renderFocusNagger();
+            }
+
+            BufferStrategy bs = canvas.getBufferStrategy();
+            Graphics2D g = (Graphics2D)bs.getDrawGraphics();
+            g.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
+            screen.flush();
+            int ww = getWindowSize().width;
+            int hh = getWindowSize().height;
+            int xOffset = (canvas.getWidth() - ww) / 2 + canvas.getParent().getInsets().left;
+            int yOffset = (canvas.getHeight() - hh) / 2 + canvas.getParent().getInsets().top;
+            g.drawImage(image, xOffset, yOffset, ww, hh, (ImageObserver)null);
+            g.dispose();
+            bs.show();
+            if (Updater.screenshot > 0) {
+                (new File(Game.gameDir + "/screenshots/")).mkdirs();
+                int count = 1;
+                LocalDateTime datetime = LocalDateTime.now();
+                String stamp = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH.mm.ss").format(datetime);
+
+                File file;
+                for(file = new File(String.format("%s/screenshots/%s.png", Game.gameDir, stamp)); file.exists(); ++count) {
+                    file = new File(String.format("%s/screenshots/%s_%s.png", Game.gameDir, stamp, count));
+                }
+
+                try {
+                    BufferedImage img = new BufferedImage(canvas.getWidth(), canvas.getHeight(), 1);
+                    Graphics2D g2d = img.createGraphics();
+                    g2d.drawImage(image, xOffset, yOffset, ww, hh, (ImageObserver)null);
+                    g2d.dispose();
+                    ImageIO.write(img, "png", file);
+                    Logging.PLAYER.info("Saved screenshot as {}.", new Object[]{file.getName()});
+                } catch (IOException e) {
+                    CrashHandler.errorHandle(e);
+                }
+
+                --Updater.screenshot;
+            }
+
+        }
+    }
+
+    private static void renderLevel() {
+        Level level = levels[currentLevel];
+        if (level != null) {
+            int xScroll = player.x - Screen.w / 2;
+            int yScroll = player.y - (Screen.h - 8) / 2;
+            if (xScroll < 0) {
+                xScroll = 0;
+            }
+
+            if (yScroll < 0) {
+                yScroll = 0;
+            }
+
+            if (xScroll > (level.w << 4) - Screen.w) {
+                xScroll = (level.w << 4) - Screen.w;
+            }
+
+            if (yScroll > (level.h << 4) - Screen.h) {
+                yScroll = (level.h << 4) - Screen.h;
+            }
+
+            if (currentLevel > 3) {
+                MinicraftImage cloud = spriteLinker.getSheet(SpriteType.Tile, "cloud_background");
+
+                for(int y = 0; y < 28; ++y) {
+                    for(int x = 0; x < 48; ++x) {
+                        screen.render(x * 8 - (xScroll / 4 & 7), y * 8 - (yScroll / 4 & 7), 0, 0, 0, cloud);
+                    }
+                }
+            }
+
+            level.renderBackground(screen, xScroll, yScroll);
+            level.renderSprites(screen, xScroll, yScroll);
+            if ((currentLevel != 3 || Updater.tickCount < 16200 || Updater.tickCount > 32400) && !isMode("minicraft.settings.mode.creative")) {
+                int brightnessMultiplier = player.potioneffects.containsKey(PotionType.Light) ? 12 : 8;
+                level.renderLight(screen, xScroll, yScroll, brightnessMultiplier);
+                screen.overlay(currentLevel, xScroll, yScroll);
+            }
+
+        }
+    }
+
+    private static void renderGui() {
+        if (!isMode("minicraft.settings.mode.creative") || player.activeItem != null) {
+            for(int x = 10; x < 26; ++x) {
+                screen.render(x * 8, Screen.h - 8, 5, 2, 0, hudSheet.getSheet());
+            }
+        }
+
+        if (player.activeItem != null) {
+            player.activeItem.renderHUD(screen, 80, Screen.h - 8, Color.WHITE);
+        }
+
+        if (player.activeItem instanceof ToolItem && ((ToolItem)player.activeItem).type == ToolType.Bow) {
+            int ac = player.getInventory().count(Items.arrowItem);
+            if (!isMode("minicraft.settings.mode.creative") && ac < 10000) {
+                Font.drawBackground("\tx" + ac, screen, 84, Screen.h - 16);
+            } else {
+                Font.drawBackground("\tx^", screen, 84, Screen.h - 16);
+            }
+
+            screen.render(84, Screen.h - 16, 4, 1, 0, hudSheet.getSheet());
+        }
+
+        ArrayList<String> permStatus = new ArrayList();
+        if (Updater.saving) {
+            permStatus.add(Localization.getLocalized("minicraft.display.gui.perm_status.saving", new Object[]{Math.round(LoadingDisplay.getPercentage())}));
+        }
+
+        if (Bed.sleeping()) {
+            permStatus.add(Localization.getLocalized("minicraft.display.gui.perm_status.sleeping", new Object[0]));
+        }
+
+        if (Bed.inBed(Game.player)) {
+            permStatus.add(Localization.getLocalized("minicraft.display.gui.perm_status.sleep_cancel", new Object[]{input.getMapping("exit")}));
+        }
+
+        if (permStatus.size() > 0) {
+            FontStyle style = (new FontStyle(Color.WHITE)).setYPos(Screen.h / 2 - 25).setRelTextPos(RelPos.TOP).setShadowType(Color.DARK_GRAY, false);
+            Font.drawParagraph(permStatus, screen, style, 1);
+        }
+
+        Updater.updateNoteTick = false;
+        if (permStatus.size() == 0 && notifications.size() > 0) {
+            Updater.updateNoteTick = true;
+            if (notifications.size() > 3) {
+                notifications = notifications.subList(notifications.size() - 3, notifications.size());
+            }
+
+            if (Updater.notetick > 180) {
+                notifications.remove(0);
+                Updater.notetick = 0;
+            }
+
+            List<String> print = new ArrayList();
+
+            for(String n : notifications) {
+                for(String l : Font.getLines(n, Screen.w, Screen.h, 0)) {
+                    print.add(l);
+                }
+            }
+
+            FontStyle style = (new FontStyle(Color.WHITE)).setShadowType(Color.DARK_GRAY, false).setYPos(Screen.h * 2 / 5).setRelTextPos(RelPos.TOP, false);
+            Font.drawParagraph(print, screen, style, 0);
+        }
+
+        if (isMode("minicraft.settings.mode.score")) {
+            int seconds = (int)Math.ceil((double)Updater.scoreTime / (double)60.0F);
+            int minutes = seconds / 60;
+            int hours = minutes / 60;
+            minutes %= 60;
+            seconds %= 60;
+            int timeCol;
+            if (Updater.scoreTime >= 18000) {
+                timeCol = Color.get(0, 555);
+            } else if (Updater.scoreTime >= 3600) {
+                timeCol = Color.get(330, 555);
+            } else {
+                timeCol = Color.get(400, 555);
+            }
+
+            Font.draw(Localization.getLocalized("minicraft.display.gui.score.time_left", new Object[]{hours > 0 ? hours + "h " : "", minutes, seconds}), screen, Screen.w / 2 - 72, 2, timeCol);
+            String scoreString = Localization.getLocalized("minicraft.display.gui.score.current_score", new Object[]{player.getScore()});
+            Font.draw(scoreString, screen, Screen.w - Font.textWidth(scoreString) - 2, 11, Color.WHITE);
+            if (player.getMultiplier() > 1) {
+                int multColor = player.getMultiplier() < 50 ? Color.get(-1, 540) : Color.RED;
+                String mult = "X" + player.getMultiplier();
+                Font.draw(mult, screen, Screen.w - Font.textWidth(mult) - 2, 20, multColor);
+            }
+        }
+
+        if (player.activeItem instanceof ToolItem) {
+            ToolItem tool = (ToolItem)player.activeItem;
+            int dura = tool.dur * 100 / (tool.type.durability * (tool.level + 1));
+            int green = (int)((float)dura * 2.55F);
+            Font.drawBackground(dura + "%", screen, 164, Screen.h - 16, Color.get(1, 255 - green, green, 0));
+        }
+
+        if (player.activeItem instanceof WateringCanItem) {
+            WateringCanItem tin = (WateringCanItem)player.activeItem;
+            int var10000 = tin.content * 100;
+            tin.getClass();
+            int dura = var10000 / 1800;
+            int green = (int)((float)dura * 2.55F);
+            Font.drawBackground(dura + "%", screen, 164, Screen.h - 16, Color.get(1, 255 - green, green, 0));
+        }
+
+        if (player.showpotioneffects && player.potioneffects.size() > 0) {
+            Map.Entry<PotionType, Integer>[] effects = (Map.Entry[])player.potioneffects.entrySet().toArray(new Map.Entry[0]);
+            if (!player.simpPotionEffects) {
+                for(int i = 0; i < effects.length; ++i) {
+                    PotionType pType = (PotionType)effects[i].getKey();
+                    int pTime = (Integer)effects[i].getValue() / 60;
+                    int minutes = pTime / 60;
+                    int seconds = pTime % 60;
+                    Font.drawBackground(Localization.getLocalized("minicraft.display.gui.potion_effects.hide_hint", new Object[]{input.getMapping("potionEffects")}), screen, 180, 9);
+                    Font.drawBackground(Localization.getLocalized("minicraft.display.gui.potion_effects.potion_dur", new Object[]{pType, minutes, seconds}), screen, 180, 17 + i * Font.textHeight() + potionRenderOffset, pType.dispColor);
+                }
+            } else {
+                for(int i = 0; i < effects.length; ++i) {
+                    PotionType pType = (PotionType)effects[i].getKey();
+                    Font.drawBackground(pType.toString().substring(0, 1), screen, Screen.w - 17 - (effects.length - 1 - i) * 8, 9, pType.dispColor);
+                }
+            }
+        }
+
+        if (!isMode("minicraft.settings.mode.creative")) {
+            for(int i = 1; i <= 30; ++i) {
+                if (i < 11) {
+                    screen.render((i - 1) * 8, Screen.h - 16, 0, 1, 0, hudSheet.getSheet());
+                }
+
+                if (i < player.health + 1 && i < 11) {
+                    screen.render((i - 1) * 8, Screen.h - 16, 0, 0, 0, hudSheet.getSheet());
+                }
+
+                if (i < player.health + 1 && i < 21 && i >= 11) {
+                    screen.render((i - 11) * 8, Screen.h - 16, 0, 2, 0, hudSheet.getSheet());
+                }
+
+                if (i < player.health + 1 && i >= 21) {
+                    screen.render((i - 21) * 8, Screen.h - 16, 0, 3, 0, hudSheet.getSheet());
+                }
+            }
+
+            for(int i = 0; i < 10; ++i) {
+                int armor = player.armor * 10 / 100;
+                if (i <= armor && player.curArmor != null) {
+                    screen.render(i * 8, Screen.h - 24, player.curArmor.sprite);
+                }
+
+                if (player.staminaRechargeDelay > 0) {
+                    if (player.staminaRechargeDelay / 4 % 2 == 0) {
+                        screen.render(i * 8, Screen.h - 8, 1, 2, 0, hudSheet.getSheet());
+                    } else {
+                        screen.render(i * 8, Screen.h - 8, 1, 1, 0, hudSheet.getSheet());
+                    }
+                } else if (i < player.stamina) {
+                    screen.render(i * 8, Screen.h - 8, 1, 0, 0, hudSheet.getSheet());
+                } else {
+                    screen.render(i * 8, Screen.h - 8, 1, 1, 0, hudSheet.getSheet());
+                }
+
+                if (i < player.hunger) {
+                    screen.render(i * 8 + (Screen.w - 80), Screen.h - 16, 2, 0, 0, hudSheet.getSheet());
+                } else {
+                    screen.render(i * 8 + (Screen.w - 80), Screen.h - 16, 2, 1, 0, hudSheet.getSheet());
+                }
+            }
+        }
+
+        if (!player.isRemoved()) {
+            if (AirWizard.active && player.getLevel().depth == 1) {
+                AirWizard boss = AirWizard.entity;
+                renderBossbar((int)((float)boss.health / (float)boss.maxHealth * 100.0F), "Air wizard");
+            } else if (ObsidianKnight.active && player.getLevel().depth == -4) {
+                ObsidianKnight boss = ObsidianKnight.entity;
+                renderBossbar((int)((float)boss.health / (float)boss.maxHealth * 100.0F), "Obsidian Knight");
+            }
+        }
+
+        TutorialDisplayHandler.render(screen);
+        renderQuestsDisplay();
+        if (signDisplayMenu != null) {
+            signDisplayMenu.render(screen);
+        }
+
+        renderDebugInfo();
+    }
+
+    public static void renderBossbar(int length, String title) {
+        int x = Screen.w / 4 - 24;
+        int y = Screen.h / 8 - 24;
+        int max_bar_length = 100;
+        int bar_length = length;
+        int INACTIVE_BOSSBAR = 4;
+        int ACTIVE_BOSSBAR = 5;
+        screen.render(x + max_bar_length * 2, y, 0, INACTIVE_BOSSBAR, 1, hudSheet.getSheet());
+
+        for(int bx = 0; bx < max_bar_length; ++bx) {
+            for(int by = 0; by < 1; ++by) {
+                screen.render(x + bx * 2, y + by * 8, 3, INACTIVE_BOSSBAR, 0, hudSheet.getSheet());
+            }
+        }
+
+        screen.render(x - 5, y, 0, ACTIVE_BOSSBAR, 0, hudSheet.getSheet());
+
+        for(int bx = 0; bx < bar_length; ++bx) {
+            for(int by = 0; by < 1; ++by) {
+                screen.render(x + bx * 2, y + by * 8, 3, ACTIVE_BOSSBAR, 0, hudSheet.getSheet());
+            }
+        }
+
+        Font.drawCentered(title, screen, y + 8, Color.WHITE);
+    }
+
+    private static void renderQuestsDisplay() {
+        if (TutorialDisplayHandler.inQuests()) {
+            if ((Boolean)Settings.get("showquests")) {
+                boolean expanding = Game.player.questExpanding > 0;
+                int length = expanding ? 5 : 2;
+                ArrayList<ListEntry> questsShown = new ArrayList();
+
+                for(Quest q : QuestsDisplay.getDisplayableQuests()) {
+                    Quest.QuestSeries series = q.getSeries();
+                    questsShown.add(!expanding ? new StringEntry(Localization.getLocalized(q.key, new Object[0]), Color.WHITE, false) : new StringEntry(q.shouldAllCriteriaBeCompleted() && q.getTotalNumCriteria() > 1 ? String.format("%s (%d/%d)", Localization.getLocalized(series.key, new Object[0]), q.getNumCriteriaCompleted(), q.getTotalNumCriteria()) : Localization.getLocalized(series.key, new Object[0]), Color.WHITE, false));
+                    if (questsShown.size() >= length) {
+                        break;
+                    }
+                }
+
+                if (questsShown.size() > 0) {
+                    potionRenderOffset = 9 + Math.min(questsShown.size(), 3) * 8 + 16;
+                    (new Menu.Builder(true, 0, RelPos.RIGHT, questsShown)).setPositioning(new Point(Screen.w - 9, 9), RelPos.BOTTOM_LEFT).setTitle("Quests").createMenu().render(screen);
+                } else {
+                    potionRenderOffset = 0;
+                }
+
+            }
+        }
+    }
+
+    private static void renderDebugInfo() {
+        int textcol = Color.WHITE;
+        if (showDebugInfo) {
+            ArrayList<String> info = new ArrayList();
+            info.add("VERSION: " + Initializer.VERSION);
+            info.add(Initializer.fra + " fps");
+            info.add("Day tiks: " + Updater.tickCount + " (" + Updater.getTime() + ")");
+            info.add(60.0F * Updater.gamespeed + " tps");
+            info.add("walk spd: " + player.moveSpeed);
+            info.add("X: " + (player.x >> 4) + "-" + player.x % 16);
+            info.add("Y: " + (player.y >> 4) + "-" + player.y % 16);
+            if (levels[currentLevel] != null) {
+                info.add("Tile: " + levels[currentLevel].getTile(player.x >> 4, player.y >> 4).name);
+            }
+
+            if (isMode("minicraft.settings.mode.score")) {
+                info.add("Score: " + player.getScore());
+            }
+
+            if (levels[currentLevel] != null) {
+                info.add("Mob Cnt: " + levels[currentLevel].mobCount + "/" + levels[currentLevel].maxMobCount);
+            }
+
+            if (levels[currentLevel] != null && currentLevel == 5) {
+                if (levels[5].chestCount > 0) {
+                    info.add("Chests: " + levels[5].chestCount);
+                } else {
+                    info.add("Chests: Complete!");
+                }
+            }
+
+            info.add("Hunger stam: " + player.getDebugHunger());
+            if (player.armor > 0) {
+                info.add("Armor: " + player.armor);
+                info.add("Dam buffer: " + player.armorDamageBuffer);
+            }
+
+            if (levels[currentLevel] != null) {
+                info.add("Seed: " + levels[currentLevel].getSeed());
+            }
+
+            FontStyle style = (new FontStyle(textcol)).setShadowType(Color.BLACK, true).setXPos(1);
+            style.setYPos(2);
+            Font.drawParagraph(info, screen, style, 2);
+        }
+
+    }
+
+    private static void renderFocusNagger() {
+        String msg = "Click to focus!";
+        Updater.paused = true;
+        int xx = (Screen.w - Font.textWidth(msg)) / 2;
+        int yy = (HEIGHT - 8) / 2;
+        int w = msg.length();
+        int h = 1;
+        screen.render(xx - 8, yy - 8, 0, 6, 0, hudSheet.getSheet());
+        screen.render(xx + w * 8, yy - 8, 0, 6, 1, hudSheet.getSheet());
+        screen.render(xx - 8, yy + 8, 0, 6, 2, hudSheet.getSheet());
+        screen.render(xx + w * 8, yy + 8, 0, 6, 3, hudSheet.getSheet());
+
+        for(int x = 0; x < w; ++x) {
+            screen.render(xx + x * 8, yy - 8, 1, 6, 0, hudSheet.getSheet());
+            screen.render(xx + x * 8, yy + 8, 1, 6, 2, hudSheet.getSheet());
+        }
+
+        for(int y = 0; y < h; ++y) {
+            screen.render(xx - 8, yy + y * 8, 2, 6, 0, hudSheet.getSheet());
+            screen.render(xx + w * 8, yy + y * 8, 2, 6, 1, hudSheet.getSheet());
+        }
+
+        for(int x = 0; x < w; ++x) {
+            screen.render(xx + x * 8, yy, 3, 6, 0, hudSheet.getSheet());
+        }
+
+        if (Updater.tickCount / 20 % 2 == 0) {
+            Font.draw(msg, screen, xx, yy, Color.get(1, 153));
+        } else {
+            Font.draw(msg, screen, xx, yy, Color.get(5, 255));
+        }
+
+    }
+
+    static Dimension getWindowSize() {
+        return new Dimension((int)((float)WIDTH * SCALE), (int)((float)HEIGHT * SCALE));
+    }
+}

@@ -1,0 +1,55 @@
+{
+  "pack_format": 1,
+  "name": "a",
+  "description": "a",
+  "language": {
+    "zh-cn": {
+      "name": "简体中文",
+      "region": "中国大陆"
+    },
+    "en-us": {
+      "name": "English",
+      "region": "US"
+    },
+    "fr-fr": {
+      "name": "French",
+      "region": "France"
+    },
+    "hu-hu": {
+      "name": "Hungarian",
+      "region": "Hungary"
+    },
+    "id-id": {
+      "name": "Indonesian",
+      "region": "Indonesia"
+    },
+    "it-it": {
+      "name": "Italian",
+      "region": "Italy"
+    },
+    "nb-no": {
+      "name": "Bokmål",
+      "region": "Norway"
+    },
+    "nn-no": {
+      "name": "Nynorsk",
+      "region": "Norway"
+    },
+    "pt-pt": {
+      "name": "Portuguese",
+      "region": "Portugal"
+    },
+    "ru-ru": {
+      "name": "Russian",
+      "region": "Russia"
+    },
+    "es-es": {
+      "name": "Spanish",
+      "region": "Spain"
+    },
+    "tr-tr": {
+      "name": "Turkish",
+      "region": "Turkey"
+    }
+  }
+}

@@ -1,12 +1,12 @@
 {
 	"schemaVersion": 1,
-	"id": "modid",
+	"id": "chinese",
 	"version": "${version}",
 
-	"name": "Example Mod",
+	"name": "Chinese",
 	"description": "This is an example description! Tell everyone what your mod is about!",
 	"authors": [
-		"Me!"
+		"4tubborn"
 	],
 	"contact": {
 		"homepage": "https://minifabric.github.io/",
@@ -14,16 +14,16 @@
 	},
 
 	"license": "CC0-1.0",
-	"icon": "assets/modid/icon.png",
+	"icon": "assets/chinese/textures/icon.png",
 
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"io.github.minifabric.example.ExampleMod"
+			"io.github.minifabric.chinese.Chinese"
 		]
 	},
 	"mixins": [
-		"modid.mixins.json"
+		"mod.mixins.json"
 	],
 
 	"depends": {
