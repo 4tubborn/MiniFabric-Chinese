@@ -8,4 +8,4 @@ Develop for [Minicraft Plus 2.2.3](https://github.com/MinicraftPlus/minicraft-pl
 
 ## License
 
-This template is available under the MIT license.
+This mod is available under the MIT license.
